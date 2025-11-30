@@ -172,7 +172,7 @@ def start_controller_loop(client):
         # 1. Gerar nova transação
         current_transaction_id += 1
         #challenge_val = random.randint(1, 5) # Dificuldade baixa para teste rápido. PDF pede 1..20
-        current_challenge =  5
+        current_challenge =  6
         # 2. Publicar Desafio
         msg = {
             "transactionId": current_transaction_id,
@@ -242,27 +242,26 @@ def validate_solution(client, payload):
 def start_miner_loop(client):
     log("=== INICIANDO MODO MINERADOR ===")
     
-    #while True:
-    log("Aguardando desafio...")
-    evt_challenge_received.wait() # Bloqueia até chegar mensagem no on_message
-    evt_challenge_received.clear()
-        
-    log(f"Trabalhando no desafio {current_transaction_id} com dificuldade {current_challenge}")
-        
-    # Executa a mineração 
-    solution = mine_challenge_logic(current_challenge)
-        
+    while True:
+        log("Aguardando desafio...")
+        evt_challenge_received.wait() # Bloqueia até chegar mensagem no on_message
+        evt_challenge_received.clear()
+            
+        log(f"Trabalhando no desafio {current_transaction_id} com dificuldade {current_challenge}")
+            
+        # Executa a mineração 
+        solution = mine_challenge_logic(current_challenge)
+            
         # Envia solução
-    msg = {
-            "clientId": my_client_id,
-            "transactionId": current_transaction_id,
-            "solution": solution
-        }
-    client.publish(TOPIC_SOLUTION, json.dumps(msg))
-    log("Solução enviada. Aguardando resultado...")
-        
-        # Pequena pausa para não floodar
-    time.sleep(1)
+        msg = {
+                "clientId": my_client_id,
+                "transactionId": current_transaction_id,
+                "solution": solution
+            }
+        client.publish(TOPIC_SOLUTION, json.dumps(msg))
+        log("Solução enviada. Aguardando resultado...")
+            
+        time.sleep(1)
 
 # --- FLUXO PRINCIPAL ---
 
@@ -346,28 +345,28 @@ def main():
         try:
             global current_challenge 
             # Loop do Controlador
-      #      while True:
+            while True:
                 # 1. Gerar nova transação
-            global current_transaction_id, transaction_resolved
-            current_transaction_id += 1
-            #current_challenge = random.randint(1, 5) # Ajuste a dificuldade aqui
-            current_challenge = 5
-                
-                # 2. Publicar Desafio
-            msg = {
-                    "transactionId": current_transaction_id,
-                    "challenge": current_challenge
-                }
-            log(f"CONTROLADOR: Publicando desafio {current_transaction_id} (Nível: {current_challenge})...")
-            client.publish(TOPIC_CHALLENGE, json.dumps(msg))
-                
-                # 3. Aguardar solução
-            transaction_resolved = False
-            while not transaction_resolved:
-                    time.sleep(0.5)
-                
-            log("CONTROLADOR: Rodada finalizada. Próxima em 5s...\n")
-            time.sleep(5)
+                global current_transaction_id, transaction_resolved
+                current_transaction_id += 1
+                #current_challenge = random.randint(1, 5) # Ajuste a dificuldade aqui
+                current_challenge = 5
+                    
+                    # 2. Publicar Desafio
+                msg = {
+                        "transactionId": current_transaction_id,
+                        "challenge": current_challenge
+                    }
+                log(f"CONTROLADOR: Publicando desafio {current_transaction_id} (Nível: {current_challenge})...")
+                client.publish(TOPIC_CHALLENGE, json.dumps(msg))
+                    
+                    # 3. Aguardar solução
+                transaction_resolved = False
+                while not transaction_resolved:
+                        time.sleep(0.5)
+                    
+                log("CONTROLADOR: Rodada finalizada. Próxima em 5s...\n")
+                time.sleep(5)
                 
         except KeyboardInterrupt:
             pass
