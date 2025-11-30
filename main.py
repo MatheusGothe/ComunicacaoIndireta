@@ -7,7 +7,7 @@ import sys
 import hashlib
 
 # --- CONFIGURAÇÕES ---
-BROKER = "broker.emqx.io"  # Broker público para teste (
+BROKER = "broker.emqx.io"  
 PORT = 1883
 TOPIC_PREFIX = "sd/matheus_grupo_X/"
 NUM_PARTICIPANTES = 3  # Quantos processos precisam estar rodando para começar
@@ -141,10 +141,19 @@ def on_message(client, userdata, msg):
 
         # 4. FASE DE OPERAÇÃO - SOLUTION
         elif topic == TOPIC_SOLUTION:
-            # Só interessa se eu FOR o líder (para validar)
-            if am_i_leader:
-                log(f"Solução recebida de {payload['clientId']} para transação {payload['transactionId']}")
-                validate_solution(client, payload)
+         if am_i_leader:
+
+            # 1 — Validar se a transação recebida bate com a atual
+            if payload["transactionId"] != current_transaction_id:
+                log(
+                    f"Solução ignorada: transação incorreta. "
+                    f"Recebida {payload['transactionId']}, atual {current_transaction_id}."
+                )
+                return
+
+            # 2 — Tudo ok → processar
+            log(f"Solução recebida de {payload['clientId']} para transação {payload['transactionId']}")
+            validate_solution(client, payload)
 
         # 5. FASE DE OPERAÇÃO - RESULT
         elif topic == TOPIC_RESULT:
@@ -157,6 +166,7 @@ def on_message(client, userdata, msg):
             
             if result != 0:
                 log(f"Transação encerrada! Vencedor: {winner}")
+            evt_solution_verified.set()
 
     except Exception as e:
         log(f"Erro ao processar mensagem: {e}")
@@ -246,22 +256,22 @@ def start_miner_loop(client):
         log("Aguardando desafio...")
         evt_challenge_received.wait() # Bloqueia até chegar mensagem no on_message
         evt_challenge_received.clear()
-            
+                    
         log(f"Trabalhando no desafio {current_transaction_id} com dificuldade {current_challenge}")
-            
+                    
         # Executa a mineração 
         solution = mine_challenge_logic(current_challenge)
-            
+                    
         # Envia solução
         msg = {
-                "clientId": my_client_id,
-                "transactionId": current_transaction_id,
-                "solution": solution
-            }
+        "clientId": my_client_id,
+        "transactionId": current_transaction_id,
+        "solution": solution
+        }
         client.publish(TOPIC_SOLUTION, json.dumps(msg))
         log("Solução enviada. Aguardando resultado...")
-            
-        time.sleep(1)
+        evt_solution_verified.wait()
+        evt_solution_verified.clear()
 
 # --- FLUXO PRINCIPAL ---
 
@@ -345,28 +355,27 @@ def main():
         try:
             global current_challenge 
             # Loop do Controlador
-            while True:
+            #while True:
                 # 1. Gerar nova transação
-                global current_transaction_id, transaction_resolved
-                current_transaction_id += 1
-                #current_challenge = random.randint(1, 5) # Ajuste a dificuldade aqui
-                current_challenge = 5
-                    
-                    # 2. Publicar Desafio
-                msg = {
-                        "transactionId": current_transaction_id,
-                        "challenge": current_challenge
-                    }
-                log(f"CONTROLADOR: Publicando desafio {current_transaction_id} (Nível: {current_challenge})...")
-                client.publish(TOPIC_CHALLENGE, json.dumps(msg))
-                    
-                    # 3. Aguardar solução
-                transaction_resolved = False
-                while not transaction_resolved:
-                        time.sleep(0.5)
-                    
-                log("CONTROLADOR: Rodada finalizada. Próxima em 5s...\n")
-                time.sleep(5)
+            global current_transaction_id, transaction_resolved
+            current_transaction_id += 1
+            current_challenge = random.randint(1, 5) # Ajuste a dificuldade aqui
+                                
+            # 2. Publicar Desafio
+            msg = {
+                                    "transactionId": current_transaction_id,
+                                    "challenge": current_challenge
+            }
+            log(f"CONTROLADOR: Publicando desafio {current_transaction_id} (Nível: {current_challenge})...")
+            client.publish(TOPIC_CHALLENGE, json.dumps(msg))
+                                
+            # 3. Aguardar solução
+            transaction_resolved = False
+            while not transaction_resolved:
+                time.sleep(0.5)
+                                
+            log("CONTROLADOR: Rodada finalizada. Próxima em 5s...\n")
+            time.sleep(5)    
                 
         except KeyboardInterrupt:
             pass
